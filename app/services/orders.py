@@ -59,13 +59,15 @@ def create_order(db: Session, data: OrderCreate, now: datetime) -> Order:
         if not book:
             raise HTTPException(status_code=404, detail=f"Book {item.book_id} not found")
         
-        if book.restricted:
-            ensure_can_access_restricted(member)
-        
-        if book.stock < item.quantity:
-            raise HTTPException(status_code=409, detail=f"Not enough stock for {book.title}")
-        
         books[item.book_id] = book
+
+    for item in data.items:
+        if books[item.book_id].restricted:
+            ensure_can_access_restricted(member)
+    
+    for item in data.items:
+        if books[item.book_id].stock < item.quantity:
+            raise HTTPException(status_code=409, detail=f"Not enough stock for {books[item.book_id].title}")
 
     order_items = []
     for item in data.items:
