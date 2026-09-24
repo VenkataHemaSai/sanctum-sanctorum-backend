@@ -3,10 +3,10 @@ from datetime import datetime
 from typing import List
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
-from app.models import Member, MemberTier, Order
+from app.models import Member, MemberTier, Order, Loan
 from app.schemas import MemberCreate, MemberStats
 
 # Tiers from lowest to highest; a member's rank is their index in this list.
@@ -73,4 +73,18 @@ def get_member_stats(db: Session, member_id: int, now: datetime) -> MemberStats:
     - overdue_loans counts unreturned loans with now > due_at.
     - late_fees_cents sums late fees of returned loans.
     """
-    raise NotImplementedError("get_member_stats")
+    get_member(db, member_id)
+    orders_paid = db.scalar(select(func.count(Order.id)).where(Order.member_id == member_id, Order.status == "paid")) or 0
+    total_spent = db.scalar(select(func.sum(Order.total_cents)).where(Order.member_id == member_id, Order.status == "paid")) or 0
+    active_loans = db.scalar(select(func.count(Loan.id)).where(Loan.id == member_id, Loan.returned_at.is_(None))) or 0
+    overdue_loans = db.scalar(select(func.count(Loan.id)).where(Loan.id == member_id, Loan.returned_at.is_(None), Loan.due_at < now)) or 0
+    late_fees = db.scalar(select(func.sum(Loan.late_fee_cents)).where(Loan.member_id == member_id, Loan.returned_at.is_not(None))) or 0
+
+    return MemberStats(
+        member_id=member_id,
+        orders_paid=orders_paid,
+        total_spent_cents=total_spent,
+        active_loans=active_loans,
+        overdue_loans=overdue_loans,
+        late_fees_cents=late_fees,
+    )
