@@ -150,4 +150,12 @@ def list_member_loans(
     db: Session, member_id: int, now: datetime, status: Optional[LoanStatus] = None
 ) -> List[LoanOut]:
     """A member's loans ordered by id, optionally filtered by computed status; 404 if member missing."""
-    raise NotImplementedError("list_member_loans")
+    get_member(db, member_id)
+    loans = db.scalars(select(Loan).where(Loan.member_id == member_id).order_by(Loan.id)).all()
+
+    results = [to_loan_out(loan, now) for loan in loans]
+
+    if status is not None:
+        results = [r for r in results if r.status == status]
+        
+    return results
