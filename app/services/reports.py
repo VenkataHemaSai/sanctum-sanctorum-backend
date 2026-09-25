@@ -2,8 +2,10 @@
 from typing import List
 
 from sqlalchemy.orm import Session
+from sqlalchemy import select, func, desc
 
 from app.schemas import TopBook
+from app.models import Book, Order, OrderItem
 
 
 def top_books(db: Session, limit: int = 5) -> List[TopBook]:
@@ -12,4 +14,23 @@ def top_books(db: Session, limit: int = 5) -> List[TopBook]:
     Rules: copies_sold sums quantities over ``paid`` orders only; books with no sales are
     excluded; sorted by copies_sold desc, then title asc; at most ``limit`` rows.
     """
-    raise NotImplementedError("top_books")
+    query = (
+        select(
+            Book.id.label("book_id"),
+            Book.title,
+            func.sum(OrderItem.quantity).label("copies_sold") 
+        )
+        .join(OrderItem, OrderItem.book_id == Book.id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(Order.status == "paid")
+        .group_by(Book.id, Book.title)
+        .order_by(desc("copies_sold"), Book.title.asc())
+        .limit(limit)
+    )
+
+    rows = db.execute(query).all()
+    
+    return [
+        TopBook(book_id=row.book_id, title=row.title, copies_sold=row.copies_sold)
+        for row in rows
+    ]
